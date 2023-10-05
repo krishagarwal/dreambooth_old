@@ -1,6 +1,6 @@
 import argparse
-import logging
 import os
+import logging
 
 logging.basicConfig(format='[%(asctime)s][%(levelname)s][%(name)s] - %(message)s', level=logging.DEBUG)
 logger = logging.getLogger("launch")

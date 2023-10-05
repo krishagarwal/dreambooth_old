@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import collections
-import json
-import logging
 import os
 import re
 import sys
 from typing import Dict
 
 import torch
-from diffusers.models.attention_processor import AttnProcessor2_0
+from diffusers.utils import is_xformers_available
+from diffusers.models.attention_processor import AttnProcessor2_0, LoRAAttnProcessor2_0, LoRAXFormersAttnProcessor, XFormersAttnProcessor
 from transformers import PretrainedConfig
 
 from dreambooth import shared  # noqa
@@ -18,7 +17,6 @@ from dreambooth.utils.utils import cleanup  # noqa
 from modules import hashes
 from modules.safe import unsafe_torch_load, load
 
-logger = logging.getLogger(__name__)
 checkpoints_list = {}
 checkpoint_alisases = {}
 checkpoints_loaded = collections.OrderedDict()
@@ -106,7 +104,7 @@ def list_models():
 
         shared.opts.data['sd_model_checkpoint'] = checkpoint_info.title
     elif cmd_ckpt is not None and cmd_ckpt != shared.default_sd_model_file:
-        logger.debug(f"Checkpoint in --ckpt argument not found (Possible it was moved to {model_path}: {cmd_ckpt}",
+        print(f"Checkpoint in --ckpt argument not found (Possible it was moved to {model_path}: {cmd_ckpt}",
               file=sys.stderr)
 
     for filename in model_list:
@@ -201,7 +199,7 @@ def reload_system_models():
         import modules.shared
         if modules.shared.sd_model is not None:
             modules.shared.sd_model.to(shared.device)
-        logger.debug("Restored system models.")
+        print("Restored system models.")
     except:
         pass
 
@@ -278,59 +276,21 @@ def enable_safe_unpickle():
 def xformerify(obj, use_lora):
     try:
         import xformers
+        print("Enable xformers")
         obj.enable_xformers_memory_efficient_attention
-        logger.debug("Enabled XFormers for " + obj.__class__.__name__)
         
     except ImportError:
+        print("Enable SDPA")
         obj.set_attn_processor(AttnProcessor2_0())
-        logger.debug("Enabled AttnProcessor2_0 for " + obj.__class__.__name__)
 
 def torch2ify(unet):
     if hasattr(torch, 'compile'):
         try:
             unet = torch.compile(unet, mode="max-autotune", fullgraph=False)
-            logger.debug("Enabled Torch2 compilation for unet.")
+            print("Compiled unet")
         except:
             pass
     return unet
 
 def is_xformers_available():
-    pass
-
-def read_metadata_from_safetensors(filename):
-
-    with open(filename, mode="rb") as file:
-        # Read metadata length
-        metadata_len = int.from_bytes(file.read(8), "little")
-
-        # Read the metadata based on its length
-        json_data = file.read(metadata_len).decode('utf-8')
-
-        res = {}
-
-        # Check if it's a valid JSON string
-        try:
-            json_obj = json.loads(json_data)
-        except json.JSONDecodeError:
-            return res
-
-        # Extract metadata
-        metadata = json_obj.get("__metadata__", {})
-        if not isinstance(metadata, dict):
-            return res
-
-        # Process the metadata to handle nested JSON strings
-        for k, v in metadata.items():
-            # if not isinstance(v, str):
-            #     raise ValueError("All values in __metadata__ must be strings")
-
-            # If the string value looks like a JSON string, attempt to parse it
-            if v.startswith('{'):
-                try:
-                    res[k] = json.loads(v)
-                except Exception:
-                    res[k] = v
-            else:
-                res[k] = v
-
-        return res
+    import xformers

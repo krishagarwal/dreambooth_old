@@ -166,11 +166,8 @@ class DreamState:
     current_step = 0
 
     def interrupt(self):
-        try:
-            if self.status_handler:
-                self.status_handler.end(desc="Interrupted")
-        except:
-            pass
+        if self.status_handler:
+            self.status_handler.end(desc="Interrupted")
         self.interrupted = True
 
     def interrupt_after_save(self):
